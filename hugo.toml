@@ -2,3 +2,17 @@ baseURL = 'https://tschoenfelder.de/'
 languageCode = 'en-us'
 title = 'WIP'
 theme = 'gokarna'
+
+[menus]
+    [[menus.main]]
+        name = 'Home'
+        pageRef =  '/'
+        weight =  10
+    [[menus.main]]
+        name = 'Blog'
+        pageRef =  '/blog'
+        weight =  20
+    [[menus.main]]
+        name = 'Contact'
+        pageRef =  '/contact'
+        weight =  20
