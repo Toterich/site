@@ -1,5 +1,5 @@
 +++
-title = 'Allocating zeroed memory may lead to lazy allocation'
+title = 'Effects of lazy allocation with malloc() and friends'
 date = 2024-08-18T15:49:16+02:00
 draft = true
 +++
@@ -16,6 +16,39 @@ draft = true
 
 #################################################################
 
+## TLDR
+
+* On Linux and Windows, allocating heap memory with `malloc()` adds the requested memory range to the process' page table, not necessarily backing it by physical memory yet
+* Physical memory is only paged in on first access
+* An OOM condition can occur on memory access even if the allocation succeeded
+* In performance-critical applications, lazy ...
+* Eager mapping can be forced either by OS-specific syscalls or simply initializing the allocated memory to a sentinel value
+
+## Introduction
+
+In this post, I will present a brief overview over how `malloc()` and friends allocate memory and how this relates to the physical RAM of the host machine, followed by an assessment of potential issues for the application programmer when relying on platform defaults. I will also offer an easy-to-use, platform-agnostic technique to force eager mapping, which might help mitigating allocation-related performance issues in your program.
+
+## Virtual vs Physical Memory
+
+## Potential issues with lazy mapping
+
+In general, there are good reasons why both Linux and Windows default to lazy mapping of memory pages. TODO: WHICH Nevertheless, there are applications where one might prefer all allocated memory to be backed by physical RAM immediately.
+
+### Running out of memory unexpectedly
+
+Lazy mapping means that your program might experience Out-of-memory issues even if the single allocation you performed at program start succeeded. The OS is perfectly fine with allocating more virtual address space than physical memory is available, in fact that is one of the motivations of having the abstraction layer of virtual memory in the first place.
+
+When you then at a later point in time start using the allocated memory and triggering page faults, at some point no physical page might be free anymore to actually map to part of the allocated virtual memory. Platforms have different ways to deal with situations like these, either by swapping some part of the physical memory to disk or killing processes in order to free up space. See e.g. (Out Of Memory Management)[https://www.kernel.org/doc/gorman/html/understand/understand016.html] for an in-depth explanation of Linux' OOM Killer. The specific OS strategies to deal with overcommitment of memory are out of scope for this blog post. The takeaway is just that preallocating all required memory for an application on startup does not necessarily protect it from experiencing an OOM condition at a later point.
+
+### 
+
+## Approaches to force eager mapping
+
+### Platform dependent syscalls
+
+### Initializing memory to sentinel
+
+## Benchmark
 
 
 * Initializing a numpy array usually allocates all the required memory at once (eagerly)
