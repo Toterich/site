@@ -34,6 +34,8 @@ In this post, I will present a brief overview over how `malloc()` and friends al
 
 In general, there are good reasons why both Linux and Windows default to lazy mapping of memory pages. TODO: WHICH Nevertheless, there are applications where one might prefer all allocated memory to be backed by physical RAM immediately.
 
+SEE https://stackoverflow.com/questions/57125253/why-is-iterating-though-stdvector-faster-than-iterating-though-stdarray/57130924#57130924
+
 ### Running out of memory unexpectedly
 
 Lazy mapping means that your program might experience Out-of-memory issues even if the single allocation you performed at program start succeeded. The OS is perfectly fine with allocating more virtual address space than physical memory is available, in fact that is one of the motivations of having the abstraction layer of virtual memory in the first place.
