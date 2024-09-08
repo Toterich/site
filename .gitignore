@@ -1,5 +1,6 @@
 .hugo_build.lock
 
 # Build artefacts of code examples
+*.out
 *.obj
 *.exe
