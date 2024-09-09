@@ -47,10 +47,10 @@ int main(int argc, char* argv[]) {
 
     double start = getWallTime_s();
 
-    volatile int result = 0; // Make sure this is not optimized away
+    volatile int sum = 0; // Make sure this loop is not optimized away
     for (int i = 0; i < numElems; i += 1000) {
         mem[i] = rand();
-        result += mem[i];
+        sum += mem[i];
     }
 
     double end = getWallTime_s();

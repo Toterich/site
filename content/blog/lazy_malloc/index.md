@@ -52,6 +52,23 @@ When you then at a later point in time start using the allocated memory and trig
 
 ## Benchmark
 
+```
+D:\projects\site\content\blog\lazy_malloc>benchmark.exe lazy
+Time: 0.004556 s
+Pagefaults (Prefetch): 0
+Pagefaults (Hot): 9785
+
+D:\projects\site\content\blog\lazy_malloc>benchmark.exe prefetch
+Time: 0.004169 s
+Pagefaults (Prefetch): 1
+Pagefaults (Hot): 9784
+
+D:\projects\site\content\blog\lazy_malloc>benchmark.exe init
+Time: 0.000189 s
+Pagefaults (Prefetch): 9783
+Pagefaults (Hot): 2
+```
+
 
 * Initializing a numpy array usually allocates all the required memory at once (eagerly)
 * Using numpy.zeros() behaves differently
