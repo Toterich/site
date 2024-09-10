@@ -16,13 +16,13 @@ draft = true
 
 In this post, I will present a brief overview over how `malloc()` and friends allocate memory and how this relates to the physical RAM of the host machine, followed by an assessment of potential issues for the application programmer when relying on platform defaults. I will also offer an easy-to-use, platform-agnostic technique to force eager mapping, which might help mitigating allocation-related performance issues in your program.
 
-## Primer on memory paging
+## Primer on virtual memory
 
 ## Potential issues with lazy allocation
 
-In general, there are good reasons why both Linux and Windows don't immediately back any allocated virtual address space by physical pages in RAM, but default to lazy, "on-demand" paging instead. 
+In general, there are good reasons why both Linux and Windows don't immediately back any allocated virtual address space by physical pages in RAM, but default to lazy, "on-demand" paging instead. It allows the operating system to allocate more memory than is physically available in the system. As memory pages that are not currently needed are written out to secondary storage, the limit here is the size of your swap file.
 
-Nevertheless, there are applications where one might prefer all allocated memory to be backed by physical RAM immediately.
+Nevertheless, there are applications where one might prefer to all allocated memory to be backed by physical RAM immediately.
 
 SEE https://stackoverflow.com/questions/57125253/why-is-iterating-though-stdvector-faster-than-iterating-though-stdarray/57130924#57130924
 
@@ -32,11 +32,26 @@ Lazy mapping means that your program might experience Out-of-memory issues even 
 
 When you then at a later point in time start using the allocated memory and triggering page faults, at some point no physical page might be free anymore to actually map to part of the allocated virtual memory. Platforms have different ways to deal with situations like these, either by swapping some part of the physical memory to disk or killing processes in order to free up space. See e.g. (Out Of Memory Management)[https://www.kernel.org/doc/gorman/html/understand/understand016.html] for an in-depth explanation of Linux' OOM Killer. The specific OS strategies to deal with overcommitment of memory are out of scope for this blog post. The takeaway is just that preallocating all required memory for an application on startup does not necessarily protect it from experiencing an OOM condition at a later point.
 
-### Page faults in the hot path
+### Page faults on the hot path
+
+When a process tries to access some newly allocated memory address and that address is not backed by physical memory yet, the operating system needs to find a page in RAM that is either not allocated by any process or one that can be safely swapped to secondary storage, so that the current process can start using the page instead of the original one (*page stealing*). In the former case, the mapping from the virtual address of the process' allocated address range to the physical page needs to be stored in the process' Translation Lookaside Buffer (*TLB*). In the latter case, additionally the page needs to be written out to disk first and the mapping in the original process' TLB be deleted.
+However, both of these operations are not free; they involve a context switch from user to kernel space as well as (in the second example) a slow write to secondary storage.
+
+For this reason, in some performance critical applications, it might be desirable to move the expensive page faults outside of a program's hot path. In practice, the effect of doing so probably only brings miniscule benefits in most scenarios, as often times the hot path is executed multiple times (e.g. the update-and-render loop in any graphical application), so the page fault costs are only paid in the first execution of the loop. Still, cases in which even the very first iteration of the hot path needs to be as quick as possible are conceivable, e.g. in high frequency trading.
 
 ## Approaches to force eager mapping
 
+To enforce physical backing of a newly allocated address range, there are two possible approaches. The first is to either use platform-specific system calls to inform the operating system that a range of addresses will be needed. The alternative is to simply write any data to the allocated memory sometime between calling `malloc()` and the first use of the address range.
+
 ### Platform dependent syscalls
+
+On Windows, there is the (PrefetchVirtualMemory)[https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-prefetchvirtualmemory] API call, which is able to cache multiple virtual address ranges in physical RAM. Notably though, it doesn't add the memory to the process' working set, meaning it does not establish a mapping in the process' TLB. The documenatation reads:
+
+```
+The prefetched memory is not added to the target process' working set; it is cached in physical memory. When the prefetched address ranges are accessed by the target process, they will be added to the working set.
+```
+
+This means that
 
 ### Initializing memory to sentinel
 
