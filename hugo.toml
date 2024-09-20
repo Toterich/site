@@ -3,16 +3,28 @@ languageCode = 'en-us'
 title = 'WIP'
 theme = 'gokarna'
 
-[menus]
-    [[menus.main]]
-        name = 'Home'
-        pageRef =  '/'
-        weight =  10
-    [[menus.main]]
+enableRobotsTXT = true
+
+[menu]
+    [[menu.main]]
+        identifier = "home"
+        name = "Home"
+        url =  '/about/'
+        weight =  1
+    [[menu.main]]
+        identifier = "blog"
         name = 'Blog'
-        pageRef =  '/blog'
-        weight =  20
-    [[menus.main]]
+        url =  '/blog/'
+        weight =  2
+    [[menu.main]]
+        identifier = "contact"
         name = 'Contact'
-        pageRef =  '/contact'
-        weight =  20
+        url = '/contact/'
+        weight = 3
+    [[menu.main]]
+        identifier = "github"
+        url = "https://github.com/Toterich"
+        weight = 4
+
+        # We use feather-icons: https://feathericons.com/
+        pre = "<span data-feather='github'></span>"
