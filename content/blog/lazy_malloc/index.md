@@ -1,6 +1,7 @@
 +++
 title = 'Effects of lazy allocation with malloc() and friends'
 date = 2024-08-18T15:49:16+02:00
+type = "post"
 draft = true
 +++
 
@@ -14,17 +15,15 @@ draft = true
 
 ## Introduction
 
-In this post, I will present a brief overview over how `malloc()` and friends allocate memory and how this relates to the physical RAM of the host machine, followed by an assessment of potential issues for the application programmer when relying on platform defaults. I will also offer an easy-to-use, platform-agnostic technique to force eager mapping, which might help mitigating allocation-related performance issues in your program.
+In this post, I will present a brief overview over how `malloc()` and friends allocate memory and how this relates to the physical RAM of the host machine, followed by an assessment of potential issues for the application programmer when relying on platform defaults, and what to do about them.
 
 ## Primer on virtual memory
 
 ## Potential issues with lazy allocation
 
-In general, there are good reasons why both Linux and Windows don't immediately back any allocated virtual address space by physical pages in RAM, but default to lazy, "on-demand" paging instead. It allows the operating system to allocate more memory than is physically available in the system. As memory pages that are not currently needed are written out to secondary storage, the limit here is the size of your swap file.
+In general, there are good reasons why both Linux and Windows don't immediately back any allocated virtual address space by physical pages in RAM, but default to lazy, "on-demand" paging instead. For instance, it allows the operating system to allocate more memory than is physically available in the system. As memory pages that are not currently needed are written out to secondary storage, the limit here is the size of your swap file.
 
-Nevertheless, there are applications where one might prefer to all allocated memory to be backed by physical RAM immediately.
-
-SEE https://stackoverflow.com/questions/57125253/why-is-iterating-though-stdvector-faster-than-iterating-though-stdarray/57130924#57130924
+Nevertheless, there are applications where one might prefer all allocated memory to be backed by physical RAM immediately, for the following reasons.
 
 ### Running out of memory unexpectedly
 
@@ -43,19 +42,51 @@ For this reason, in some performance critical applications, it might be desirabl
 
 To enforce physical backing of a newly allocated address range, there are two possible approaches. The first is to either use platform-specific system calls to inform the operating system that a range of addresses will be needed. The alternative is to simply write any data to the allocated memory sometime between calling `malloc()` and the first use of the address range.
 
-### Platform dependent syscalls
+### Platform dependent system calls
 
-On Windows, there is the (PrefetchVirtualMemory)[https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-prefetchvirtualmemory] API call, which is able to cache multiple virtual address ranges in physical RAM. Notably though, it doesn't add the memory to the process' working set, meaning it does not establish a mapping in the process' TLB. The documenatation reads:
+#### Windows
+
+On Windows, there is the (PrefetchVirtualMemory)[https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-prefetchvirtualmemory] API call, which is able to cache multiple virtual address ranges in physical RAM. Notably though, it doesn't add the memory to the process' working set, meaning it does not establish a mapping between virtual and physical addresses in the process' TLB. The documentation reads:
 
 ```
-The prefetched memory is not added to the target process' working set; it is cached in physical memory. When the prefetched address ranges are accessed by the target process, they will be added to the working set.
+The prefetched memory is not added to the target process' working set; it 
+is cached in physical memory. When the prefetched address ranges are 
+accessed by the target process, they will be added to the working set.
 ```
 
-This means that
+This means that while later accessing the allocated memory will save the potentially needed flushing of some other page to disk, a context switch to the OS kernel will still be required in order to populate the TLB. We will see in the (benchmark section)[#benchmark] whether this caveat has an effect on the performance numbers.
+
+#### Linux
+
+On Linux, the (mmap)[https://man7.org/linux/man-pages/man2/mmap.2.html] syscall allows creating a mapping of virtual addresses. Specifically, the documentation of the `MAP_POPULATE` flag reads:
+
+```
+Populate (prefault) page tables for a mapping.  For a file
+mapping, this causes read-ahead on the file.  This will
+help to reduce blocking on page faults later.
+```
+
+, which sounds like it fixes our problem exactly.
 
 ### Initializing memory to sentinel
 
+Alternatively to the system-specific facilities mentioned above, a portable way to prefetch some address range is to simply write some value to it. Then the OS has no choice but to back the virtual memory with physical pages, as the stored data needs to live somewhere. The following snippet allocates space for 42 integers and then initializes each one to a sentinel value.
+
+```c
+int *mem = (int*)malloc(42 * sizeof(int));
+int const sentinel = –2147483648;
+for (int i = 0; i < 42; i++) {
+    mem[i] = sentinel;
+}
+```
+
+NOTE: Watch out when trying to use `0` as the sentinel value (or use `calloc` instead of `malloc` to immediately zero the memory upon allocation). In this case, the OS may choose to map multiple virtual pages to the same zeroed location in physical memory, which means you still need to pay the cost of remapping pages to new regions when you actually write useful data to them. For this reason, it is more sensible for this trick to use a non-zero initialization value.
+
+Of course, it depends on your application if there actually is an unneeded value in the datatype of your allocation that you can use for initialization here.
+
 ## Benchmark
+
+{{< code language="c" source="/content/blog/lazy_malloc/benchmark.c">}}
 
 ```
 D:\projects\site\content\blog\lazy_malloc>benchmark.exe lazy

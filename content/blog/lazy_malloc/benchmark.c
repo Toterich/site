@@ -1,6 +1,5 @@
-#include <cstdlib>
-#include <cstdio>
-#include <cstring>
+#include <stdlib.h>
+#include <stdio.h>
 
 #include <Windows.h>
 #include <Psapi.h>
@@ -37,7 +36,9 @@ int main(int argc, char* argv[]) {
         PrefetchVirtualMemory(GetCurrentProcess(), 1, &memRange, 0);
     }
     else if (!strcmp(mode, "init")) {
-        memset(mem, INT_MIN, numElems * sizeof(int));
+        for (int i = 0; i < numElems; i++) {
+            mem[i] = INT_MIN;
+        }
     }
     else {
         return -1;
