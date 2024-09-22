@@ -2,7 +2,7 @@
 title = 'Lazy allocation and forcing early pagefaults'
 date = 2024-09-20T15:49:16+02:00
 type = "post"
-draft = true
+draft = false
 +++
 
 ## TLDR
