@@ -1,6 +1,6 @@
 +++
-title = 'Effects of lazy allocation with malloc() and friends'
-date = 2024-08-18T15:49:16+02:00
+title = 'Lazy allocation and forcing early pagefaults'
+date = 2024-09-20T15:49:16+02:00
 type = "post"
 draft = true
 +++
@@ -10,18 +10,20 @@ draft = true
 * On Linux and Windows, allocating heap memory with `malloc()` adds the requested memory range to the process' page table, not necessarily backing it by physical memory yet
 * Physical memory is only paged in on first access
 * An OOM condition can occur on memory access even if the allocation succeeded
-* In performance-critical applications, lazy ...
+* In performance-critical applications, pagefaults can add a significant overhead to the hot path
 * Eager mapping can be forced either by OS-specific syscalls or simply initializing the allocated memory to a sentinel value
 
 ## Introduction
 
-In this post, I will present a brief overview over how `malloc()` and friends allocate memory and how this relates to the physical RAM of the host machine, followed by an assessment of potential issues for the application programmer when relying on platform defaults, and what to do about them.
+When an application requests some amount of memory from the Operating System (e.g. by calling `malloc()` in a C-program), it receives a pointer to some address, with the understanding that on that address lies a continuous range of memory of the requested size for the current process to do with as it pleases. Internals of how the OS, in conjunction with primary (RAM) and secondary (disk) storage, handles the memory allocation, are abstracted away and usually not of interest for the application programmer.
 
-## Primer on virtual memory
+In some situations however, this abstraction starts to leak and it pays to dive a bit deeper into how the system actually manages memory. The first important part to consider is that the address range a process received via `malloc()` does not denote an actual region of memory anywhere on a physical device. Instead, it points to *Virtual Memory*, an abstraction that is local to each process. The OS takes care of backing this abstract virtual memory of a process by an actual storage device. However, it doesn't necessarily do so immediately, but in many cases only when the allocated memory is actually used by the process. When a process accesses some of its virtual memory that is not yet backed by physical memory, a *page fault* occurs which triggers the OS to clear some space on primary storage for the process to use.
+
+While this process is usually opaque to the user process, some issues can arise from it in certain applications.
 
 ## Potential issues with lazy allocation
 
-In general, there are good reasons why both Linux and Windows don't immediately back any allocated virtual address space by physical pages in RAM, but default to lazy, "on-demand" paging instead. For instance, it allows the operating system to allocate more memory than is physically available in the system. As memory pages that are not currently needed are written out to secondary storage, the limit here is the size of your swap file.
+In general, there are good reasons why both Linux and Windows don't immediately back any allocated virtual address space by physical pages in RAM, but default to lazy, "on-demand" paging instead. For instance, it allows the operating system to allocate more memory than is physically available in the system. As memory pages that are not currently needed are written out to secondary storage, the limit here is the size of your swap file. It also helps avoiding fragmentation the virtual address space; a range of memory can be contiguous in the view of a process, even though it is backed by multiple physical pages all over the system's RAM.
 
 Nevertheless, there are applications where one might prefer all allocated memory to be backed by physical RAM immediately, for the following reasons.
 
@@ -44,29 +46,30 @@ To enforce physical backing of a newly allocated address range, there are two po
 
 ### Platform dependent system calls
 
-#### Windows
-
-On Windows, there is the (PrefetchVirtualMemory)[https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-prefetchvirtualmemory] API call, which is able to cache multiple virtual address ranges in physical RAM. Notably though, it doesn't add the memory to the process' working set, meaning it does not establish a mapping between virtual and physical addresses in the process' TLB. The documentation reads:
-
-```
-The prefetched memory is not added to the target process' working set; it 
-is cached in physical memory. When the prefetched address ranges are 
-accessed by the target process, they will be added to the working set.
-```
-
-This means that while later accessing the allocated memory will save the potentially needed flushing of some other page to disk, a context switch to the OS kernel will still be required in order to populate the TLB. We will see in the (benchmark section)[#benchmark] whether this caveat has an effect on the performance numbers.
-
 #### Linux
 
 On Linux, the (mmap)[https://man7.org/linux/man-pages/man2/mmap.2.html] syscall allows creating a mapping of virtual addresses. Specifically, the documentation of the `MAP_POPULATE` flag reads:
 
 ```
-Populate (prefault) page tables for a mapping.  For a file
-mapping, this causes read-ahead on the file.  This will
+Populate (prefault) page tables for a mapping. For a file
+mapping, this causes read-ahead on the file. This will
 help to reduce blocking on page faults later.
 ```
 
 , which sounds like it fixes our problem exactly.
+
+#### Windows
+
+Sadly, Windows does not provide an equivalent API to Linux' `mmap` with the `MAP_POPULATE` flag. There is (PrefetchVirtualMemory)[https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-prefetchvirtualmemory], which is able to cache multiple virtual address ranges in physical RAM. Notably though, it doesn't add the memory to the process' working set, meaning it does not establish a mapping between virtual and physical addresses in the process' TLB. The documentation reads:
+
+```
+The prefetched memory is not added to the target process' working set; it
+is cached in physical memory. When the prefetched address ranges are
+accessed by the target process, they will be added to the working set.
+```
+
+This means this function is mostly useful to fetch already written-to memory from disk that has been unpaged in the meantime, as it allows bundling of the required IO operations. Accessing the prefetched memory will still trigger a pagefault and a context switch to the kernel to update the TLB. Therefore the only performance gains we could expect from this for the usecase of prefetching newly allocated memory would come from the potentially required unpaging of some other memory in order to clear space. We will see in the [benchmark section](#benchmark) whether this caveat has an effect on the performance numbers.
+
 
 ### Initializing memory to sentinel
 
@@ -86,67 +89,37 @@ Of course, it depends on your application if there actually is an unneeded value
 
 ## Benchmark
 
+Here is a small benchmark application that measures both the runtime and the number of pagefaults when writing random data to some memory range. Depending on the input parameter, the application initializes the memory in some way beforehand:
+
+* `lazy`: No pre-initialization
+* `prefetch`: Using the Windows-specific `PrefetchVirtualMemory` call after allocation,
+* `init`: Initializing all memory to a constant value after allocation.
+
+The benchmark code is Windows-only, only because the machine I'm currently working on runs on Windows. Investigating the behavior of `mmap` would still be interesting and I might add a Linux benchmark to this blogpost at a later date.
+
 {{< code language="c" source="/content/blog/lazy_malloc/benchmark.c">}}
+
+### Results
+
+This is the output of the benchmark application. Repeating this several times showed similar results:
 
 ```
 D:\projects\site\content\blog\lazy_malloc>benchmark.exe lazy
 Time: 0.004556 s
-Pagefaults (Prefetch): 0
+Pagefaults (Prepare): 0
 Pagefaults (Hot): 9785
 
 D:\projects\site\content\blog\lazy_malloc>benchmark.exe prefetch
 Time: 0.004169 s
-Pagefaults (Prefetch): 1
+Pagefaults (Prepare): 1
 Pagefaults (Hot): 9784
 
 D:\projects\site\content\blog\lazy_malloc>benchmark.exe init
 Time: 0.000189 s
-Pagefaults (Prefetch): 9783
+Pagefaults (Prepare): 9783
 Pagefaults (Hot): 2
 ```
 
+Both the `lazy` and `init` runs perform as expected. On the `lazy` run, there are no pagefaults in the "Prepare" stage (because there is none), but a high number of them during the actual benchmark. On the `init` run, all pagefaults are happening in the "Prepare" stage, and as a result the benchmark itself finishes much quicker, by a factor of ~24 for this example and on my machine (Intel I7 12700K).
 
-* Initializing a numpy array usually allocates all the required memory at once (eagerly)
-* Using numpy.zeros() behaves differently
-* Because of calloc, which retrieves
-
-The [numpy.ndarray](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html) class is one the most basic building blocks of NumPy, providing an interface to an n-dimensional array of an arbitrary datatype.
-
-Internally, an instance of `ndarray`, maps to a contiguous area of memory in the Python process' virtual adress space. This is demonstrated in the following snippet. We first create an array of 5 elements. We then use `ctypes.string_at` to read back the internal memory at each element offset.
-
-```python
->>> import numpy as np
->>> from ctypes import string_at
->>> arr = np.linspace(1, 5, 5, dtype=np.int64)
->>> align = arr.dtype.alignment
->>> align
-8
->>> ptr = arr.__array_interface__['data'][0]
->>> string_at(ptr, align).hex()
-'0100000000000000'
->>> string_at(ptr+align, align).hex()
-'0200000000000000'
->>> string_at(ptr+2*align, align).hex()
-'0300000000000000'
->>> string_at(ptr+3*align, align).hex()
-'0400000000000000'
->>> string_at(ptr+4*align, align).hex()
-'0500000000000000'
-```
-
-So at least in the case of `numpy.linspace()`, the behavior seems to be like one would initially expect: A
-
-
-use_calloc in numpy source
-https://github.com/numpy/numpy/blob/d60444f2383b9549e02bb61db956b91a5110ead1/numpy/_core/src/multiarray/ctors.c#L853
-
-https://stackoverflow.com/questions/1538420/difference-between-malloc-and-calloc
-
-
-https://stackoverflow.com/questions/67240022/lazy-overcommit-allocation-and-calloc
-
-
-# View Pagetable for process
-https://unix.stackexchange.com/questions/369185/viewing-pagetable-for-a-process
-
-https://medium.com/@besartdollma/lazy-dynamic-memory-allocation-in-c-32bb4228108b
+The `prefetch` run shows that `PrefetchVirtualMemory` didn't save any pagefaults on the hot path, which is in line with the documentation of that function. The runtime is comparable to the `lazy` execution, so this adds to the argument that `PrefetchVirtualMemory` probably isn't the right tool to achieve eager mapping of memory on Windows. Instead, the pre-initialization method should be used.

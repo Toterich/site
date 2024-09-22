@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
     free(mem);
 
     printf("Time: %f s\n", end - start);
-    printf("Pagefaults (Prefetch): %d\n", c1.PageFaultCount - c0.PageFaultCount);
+    printf("Pagefaults (Prepare): %d\n", c1.PageFaultCount - c0.PageFaultCount);
     printf("Pagefaults (Hot): %d\n", c2.PageFaultCount - c1.PageFaultCount);
 
     return 0;
