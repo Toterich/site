@@ -31,7 +31,7 @@ Nevertheless, there are applications where one might prefer all allocated memory
 
 Lazy mapping means that your program might experience Out-of-memory issues even if the single allocation you performed at program start succeeded. The OS is perfectly fine with allocating more virtual address space than there is available physical memory, in fact being able to do this is one of the motivations of having the abstraction layer of virtual memory in the first place.
 
-When you then at a later point in time start using the allocated memory and triggering page faults, at some point no physical page might be free anymore to actually map to part of the allocated virtual memory. Platforms have different ways to deal with situations like these, either by swapping some part of the physical memory to disk or killing processes in order to free up space. See e.g. (Out Of Memory Management)[https://www.kernel.org/doc/gorman/html/understand/understand016.html] for an in-depth explanation of Linux' OOM Killer. The specific OS strategies to deal with overcommitment of memory are out of scope for this blog post. The takeaway is just that preallocating all required memory for an application on startup does not necessarily protect it from experiencing an OOM condition at a later point.
+When you then at a later point in time start using the allocated memory and triggering page faults, at some point no physical page might be free anymore to actually map to part of the allocated virtual memory. Platforms have different ways to deal with situations like these, either by swapping some part of the physical memory to disk or killing processes in order to free up space. See e.g. [Out Of Memory Management](https://www.kernel.org/doc/gorman/html/understand/understand016.html) for an in-depth explanation of Linux' OOM Killer. The specific OS strategies to deal with overcommitment of memory are out of scope for this blog post. The takeaway is just that preallocating all required memory for an application on startup does not necessarily protect it from experiencing an OOM condition at a later point.
 
 ### Page faults on the hot path
 
@@ -48,7 +48,7 @@ To enforce physical backing of a newly allocated address range, there are two po
 
 #### Linux
 
-On Linux, the (mmap)[https://man7.org/linux/man-pages/man2/mmap.2.html] syscall allows creating a mapping of virtual addresses. Specifically, the documentation of the `MAP_POPULATE` flag reads:
+On Linux, the [mmap](https://man7.org/linux/man-pages/man2/mmap.2.html) syscall allows creating a mapping of virtual addresses. Specifically, the documentation of the `MAP_POPULATE` flag reads:
 
 ```
 Populate (prefault) page tables for a mapping. For a file
@@ -60,7 +60,7 @@ help to reduce blocking on page faults later.
 
 #### Windows
 
-Sadly, Windows does not provide an equivalent API to Linux' `mmap` with the `MAP_POPULATE` flag. There is (PrefetchVirtualMemory)[https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-prefetchvirtualmemory], which is able to cache multiple virtual address ranges in physical RAM. Notably though, it doesn't add the memory to the process' working set, meaning it does not establish a mapping between virtual and physical addresses in the process' TLB. The documentation reads:
+Sadly, Windows does not provide an equivalent API to Linux' `mmap` with the `MAP_POPULATE` flag. There is [PrefetchVirtualMemory](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-prefetchvirtualmemory), which is able to cache multiple virtual address ranges in physical RAM. Notably though, it doesn't add the memory to the process' working set, meaning it does not establish a mapping between virtual and physical addresses in the process' TLB. The documentation reads:
 
 ```
 The prefetched memory is not added to the target process' working set; it
