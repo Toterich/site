@@ -11,15 +11,25 @@ https://www.linkedin.com/pulse/why-you-should-use-microservice-architecture-lee-
 
 Microservices are a well-established design pattern for large software projects, where an application is split into independent components, usually communicating via a network-based interface. Oftentimes, HTTP is used as the protocol to exchange data between microservices, which also allows easily distributing services over several machines. [This 2014 article by Martin Fowler](https://martinfowler.com/articles/microservices.html) explains the concept in some detail.
 
-There are many purported advantages of a software design like this, ranging from purely technical to organizational ones. However, in my opinion many of those are not very convincing when it comes to motivate moving to a microservice architecture. Let's go through a few of the popular arguments and try to challenge them.
+There are many purported advantages of a software design like this, ranging from purely technical to organizational ones. However, in my opinion many of those are not very convincing when it comes to motivate moving to a microservice architecture. 
 
-## Independent Scaling
+## The problem with microservices
 
-### The argument:
+But first, why would the choice to use microservices require motivation in the first place? Do they bring any inherent drawbacks that might negatively affect an application?
+
+The biggest and most glaring drawback is the significant overhead when exchanging messages between independent programs via some sort of serial protocol.
+
+## Thoughts on common microservice arguments
+
+With the motivation for why microservices should be critically examined out of the way, let's gro through a few of the popular arguments in favor of them and try to challenge those.
+
+### Independent Scaling
+
+#### The argument:
 
 If only a certain subcomponent of an application starts experiencing higher load, factoring this component out into a microservice and deploying it on a different machine allows scaling it up independently of the rest of the application, either vertically by increasing the amount of resources that the server running the microservice has available, or horizontally by deploying multiple instances of the same service on multiple machines.
 
-### My take:
+#### My take:
 
 I think this is indeed a strong argument for using microservices, especially nowadays where many applications, especially in the world of web programming, are deployed on virtual machines and scaling up a single node requires just a change in some config file. If components of an application communicate via a serial protocol, routing this traffic via the network between machines becomes trivial, and the hardware running some component of a larger system can thus be scaled up completely independent of the other components.
 
@@ -27,9 +37,9 @@ On the other hand of course, in a monolithic design running on a single node, th
 
 So to reiterate, I'm pretty sure that concerns for scalability and deploying an application on a distributed hardware architecture may absolutely be a convincing cause for using microservices. Obviously, it still needs to be considered if and by how much such a deployment actually benefits an application on a per-case basis.
 
-## Independent Deployability
+### Independent Deployability
 
-### The argument:
+#### The argument:
 
 Large projects often employ multiple teams to work on different parts of an application. If every team owns their separate microservice, with a clearly defined interface to the other services, it becomes possible to independently (re)deploy parts of an application, e.g. after a bug fix. As long as the interface to the outside world does not change, other services can just keep on using the updated microservice without any downtime.
 
@@ -40,7 +50,7 @@ Change cycles are tied together - a change made to a small part of the applicati
 requires the entire monolith to be rebuilt and deployed.
 ```
 
-### My take:
+#### My take:
 
 I think this argument misses the fact that monolithic applications also can be designed in a way that allows hot-reloading some of their components at runtime, via the use of shared libraries (e.g. .dll files on Windows or .jar files for the JVM).
 
@@ -52,16 +62,18 @@ Of course, with a design like this, all components are hosted by the same proces
 
 All in all, I don't think the argument for independent deployability of microservices holds much water; if this is the only reason you decided for a microservice architecture, it would probably be a good idea to reconsider in favor of a simpler, more local solution.
 
-## Separation of Concerns
+### Separation of Concerns and Technical Ownership
 
-### The argument:
+#### The argument:
 
-With stable interfaces between microservices, ideally members of a team can stop concerning themselves with the internal implementation details of another service altogether and solely focus on architecting their own service, reducing the mental load required to reason about the system.
+With stable interfaces between microservices, ideally members of a team can stop concerning themselves with the internal implementation details of another service altogether and solely focus on developing their own service. By reducing all other components to just their interfaces, the mental load required to reason about the full system is reduced.
 
-### My take:
+In addition, the choice of technology becomes entirely independent of the surrounding systems. As long as a service satisfies the agreed upon interface contract, it is free to use any programming language, libraries or frameworks the team desires.
 
+#### My take:
 
-## Technological Ownership
+I'd like to hark back here to my thoughts about the "Independent Deployability" argument above, as I think they apply here as well: The advantages stated in this argument are not exclusive to microservices. If an application consists of multiple libraries, each with a clearly defined interface, it is also not required for developers of one library to have in-depth knowledge about the internal details of another.
 
+Also, it is entirely possible for a shared library to be implemented on another technology stack than the client program, as long as a stable binary interface is provided. For example, many programming languages' standard libraries provide facilities to create wrappers in C, which in turn describes the defacto standard interface to call into shared libraries. So e.g. a library written in Go can expose its public functions via a C interface, and a client written in Python can then call into this interface. The mechanism to allow a program written in one programming language to call into code written in another one is commonly known as a *Foreign Function Interface(FFI)*.
 
-
+I do concede that working with multiple FFIs in the case of many components in different languages doesn't sound fun and would probably increase the system complexity compared to serializing all procedure calls into messages the same way and sending them via a socket connection (which would be the alternative in microservice-world). Then again, maybe using so many different technologies that this becomes cumbersome is a smell of a bad design in the first place.
