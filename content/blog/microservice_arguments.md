@@ -1,11 +1,9 @@
 +++
-title = "Let's challenge common arguments in favor of microservices"
-date = 2024-10-28T09:42:14+01:00
+title = "Challenge of common arguments in favor of microservices"
+date = 2024-11-16T09:42:14+01:00
 type = "post"
-draft = true
+draft = false
 +++
-
-https://www.linkedin.com/pulse/why-you-should-use-microservice-architecture-lee-atchison-ouxgc/
 
 **Disclaimer:** The following is an opinion piece about why I think the choice to implement an application in the form of distributed microservices is sometimes made for the wrong reasons. It is not extensively researched and might very well contain factual errors. It's main purpose is to allow me to order my own thoughts on the matter.
 
@@ -17,11 +15,17 @@ There are many purported advantages of a software design like this, ranging from
 
 But first, why would the choice to use microservices require motivation in the first place? Do they bring any inherent drawbacks that might negatively affect an application?
 
-The biggest and most glaring drawback is the significant overhead when exchanging messages between independent programs via some sort of serial protocol.
+The biggest and most glaring drawback is the significant overhead when exchanging data between distinct processes, especially if they run on different machines and need to communicate via the network. The [Latency Numbers Everyone Should Know](https://static.googleusercontent.com/media/sre.google/en//static/pdf/rule-of-thumb-latency-numbers-letter.pdf) table has been going around for many years now. In it, we can see that a round trip between nodes in the same datacenter incurs a latency of ~500us. In addition, to send data over the network it needs to be serialized on the sender's and parsed on the receiver's side, which adds additional overhead. The serialization overhead needs to be paid even if microservices run on the same node.
+
+In comparison, in a monolithic application all components write to and read from the same memory device. The table denotes the latency for referencing main memory as ~100ns, which is lower than the network roundtrip by a factor of 5000. If all components of the application use the same memory layout, no serialization or parsing is required.
+
+A secondary argument against the use of microservices is the added complexity of setting up multiple programs, possibly on multiple nodes, each with their own message passing stack to communicate with the rest of the system. This also makes debugging of errors harder, as the control and data flow needs to be followed across process boundaries.
+
+In my opinion, these are very compelling arguments for defaulting to a monolithic application whenever it is feasible, and only start splitting off components into microservices as soon as strong arguments to do so arise.
 
 ## Thoughts on common microservice arguments
 
-With the motivation for why microservices should be critically examined out of the way, let's gro through a few of the popular arguments in favor of them and try to challenge those.
+With the motivation for why microservices should be critically examined out of the way, let's go through a few of the popular arguments in favor of them and try to challenge those.
 
 ### Independent Scaling
 
@@ -77,3 +81,11 @@ I'd like to hark back here to my thoughts about the "Independent Deployability" 
 Also, it is entirely possible for a shared library to be implemented on another technology stack than the client program, as long as a stable binary interface is provided. For example, many programming languages' standard libraries provide facilities to create wrappers in C, which in turn describes the defacto standard interface to call into shared libraries. So e.g. a library written in Go can expose its public functions via a C interface, and a client written in Python can then call into this interface. The mechanism to allow a program written in one programming language to call into code written in another one is commonly known as a *Foreign Function Interface(FFI)*.
 
 I do concede that working with multiple FFIs in the case of many components in different languages doesn't sound fun and would probably increase the system complexity compared to serializing all procedure calls into messages the same way and sending them via a socket connection (which would be the alternative in microservice-world). Then again, maybe using so many different technologies that this becomes cumbersome is a smell of a bad design in the first place.
+
+## Closing thoughts
+
+I hope this post doesn't come off as too rambly. Like I mentioned in the beginning, I wanted to jot down my thoughts about microservices and when (not) to use them in a more-or-less structured manner in order to help my own understanding.
+
+As a final verdict, I'd say I remain skeptical of the microservice pattern. While it does lend itself well to the practice of horizontal scaling for high-throughput applications (and as I mentioned earlier, I think scaling is a strong argument in favor of using microservices), I have seen in some previous jobs that this topic suffers from some amount of cargo culting and there are probably many applications in the world implemented as several microservices, which would benefit from a more monolithic design.
+
+One thing to keep in mind is that the decision between microservices and a monolith is not binary. It is perfectly possible to split off a single component of an application into a microservice, for example to allow independent scaling of that component, while keeping the rest of the monolith intact. With this understanding, microservices become just another tool for a Software Architect, one which I think should be used with caution.
